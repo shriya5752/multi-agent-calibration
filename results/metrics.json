@@ -1,0 +1,27 @@
+{
+  "n_questions": 30,
+  "n_rounds": 2,
+  "accuracy_by_round": [
+    {
+      "round": 1,
+      "accuracy": 0.7555555555555555
+    },
+    {
+      "round": 2,
+      "accuracy": 0.7222222222222222
+    }
+  ],
+  "ece_round_1": 0.1488888888888889,
+  "ece_final_round": 0.16722222222222222,
+  "flip_stats": {
+    "flip_rate": 0.2222222222222222,
+    "flip_helped_rate": 0.25,
+    "flip_hurt_rate": 0.4,
+    "n": 90,
+    "n_flipped": 20
+  },
+  "aggregation_accuracy": {
+    "majority_vote_accuracy": 0.8,
+    "confidence_weighted_accuracy": 0.8333333333333334
+  }
+}
