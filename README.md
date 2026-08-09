@@ -155,8 +155,6 @@ result here. Things worth specifically checking once you have real data:_
 
 ## Why I built this
 
-This is a scoped-down version of a research question I'm exploring in my engineering
-capstone: metacognitive sensitivity (meta-d′) and belief drift in multi-agent LLM
-deliberation. Building this smaller, fully-reproducible version let me test the core
-mechanics — debate loops, confidence logging, calibration measurement — before applying
-similar ideas at larger scale.
+While reading around multi-agent LLM systems, I kept running into the same open question — does giving agents the ability to see and respond to each other actually improve their reliability, or does it just produce the appearance of consensus? Most treatments of multi-agent debate report only final-answer accuracy, without measuring whether an agent's stated confidence is actually correlated with correctness, or tracking what happens when one agent's answer flips after seeing a more confident peer.
+
+That gap is what this project isolates: not just whether debate changes the final answer, but whether it improves calibration — the correlation between stated confidence and empirical accuracy, and how belief updates propagate across rounds. The setup is deliberately minimal: three fixed personas on a single base model, a controlled question set, and a small, explicit metric suite (accuracy by round, expected calibration error, belief-flip rate) so the calibration effect can be isolated from confounds like model-capability differences across agents.
