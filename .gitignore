@@ -7,9 +7,12 @@ venv/
 *.egg-info/
 
 # Keep the repo's own generated results out of git if you want a clean
-# history when re-running experiments — comment these out if you'd
+# history when re-running experiments â€” comment these out if you'd
 # rather commit your results as evidence of the run.
 # results/raw_logs.csv
 # results/summary.csv
 # results/metrics.json
 # results/plots/*.png
+
+
+runs/

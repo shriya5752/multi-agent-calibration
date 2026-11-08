@@ -1,160 +1,61 @@
-# Multi-Agent Calibration: Does Debate Make LLM Agents Better Calibrated?
+# Multi-Agent Calibration
 
-A small multi-agent system where three LLM agents (same base model, different personas)
-independently answer a question, debate over multiple rounds by reading each other's
-answers and reasoning, and revise their confidence. The project measures whether
-**debate improves accuracy**, whether **stated confidence tracks actual correctness**
-(calibration), and whether agents get swayed by confident-but-wrong peers.
+A Python testbed asking whether three same-model agents with different personas become more accurate and better calibrated after reading each other's answers.
 
-This started as a scaled-down testbed for a larger research question I'm exploring
-(metacognitive sensitivity and belief drift in multi-agent LLM deliberation) — this repo
-is the self-contained, reproducible version of that idea.
+## What the saved pilot shows
 
-## Why this, and not just another "multi-agent chatbot" repo
+30 hand-curated MCQs, three agents, two rounds (180 predictions). The original findings identify the model as llama-3.1-8b-instant via Groq; the historical run has no manifest, so its provider provenance cannot be independently verified from the logs.
 
-Most multi-agent demos show that agents *can* talk to each other. This project instead
-asks a measurable question — **does talking to each other make them more accurate and
-better calibrated, or does it just make them agree with whoever sounds confident?** —
-and answers it with real metrics (calibration curves, expected calibration error,
-belief-flip analysis), not just example transcripts.
+| Measure | Independent round | Post-debate round |
+|---|---:|---:|
+| Individual accuracy | 75.56% | 72.22% |
+| Mean stated confidence | 90.44% | 87.17% |
+| ECE (10 bins) | 0.1489 | 0.1672 |
+| Correctness Brier score | 0.1981 | 0.2192 |
+| Majority vote accuracy | 76.67% | 80.00% |
+| Confidence-weighted accuracy | 80.00% | 83.33% |
+
+Votes in this table abstain on ties and count abstentions as incorrect. Original summaries used first-agent tie breaking. These policies can differ. The individual accuracy change is -3.33 percentage points; a paired question bootstrap gives a descriptive 95% interval of [-8.89, +2.22] points. This small convenience sample supports exploratory observations, not a general claim that debate harms reliability.
 
 ## Architecture
 
-```
-                     ┌─────────────────────────────────────┐
-                     │           Question (MCQ)             │
-                     └───────────────────┬───────────────────┘
-                                          │
-              ┌───────────────────────────┼───────────────────────────┐
-              ▼                           ▼                           ▼
-     ┌─────────────────┐        ┌─────────────────┐        ┌─────────────────┐
-     │  Agent A         │        │  Agent B         │        │  Agent C         │
-     │  Cautious        │        │  Confident       │        │  Devil's         │
-     │  Skeptic         │        │  Solver          │        │  Advocate        │
-     └────────┬─────────┘        └────────┬─────────┘        └────────┬─────────┘
-              │  answer + confidence(0-100) + reasoning  [ROUND 1]      │
-              └───────────────────────────┼───────────────────────────┘
-                                          ▼
-                     each agent now sees the OTHER two agents'
-                     round-1 answer, confidence, and reasoning
-                                          │
-              ┌───────────────────────────┼───────────────────────────┐
-              ▼                           ▼                           ▼
-     ┌─────────────────┐        ┌─────────────────┐        ┌─────────────────┐
-     │  Agent A revises │        │  Agent B revises │        │  Agent C revises │
-     └────────┬─────────┘        └────────┬─────────┘        └────────┬─────────┘
-              │           [ROUND 2 ... N, same pattern]                │
-              └───────────────────────────┼───────────────────────────┘
-                                          ▼
-                     ┌─────────────────────────────────────┐
-                     │  Aggregate: majority vote  vs.       │
-                     │  confidence-weighted vote            │
-                     └─────────────────────────────────────┘
-                                          │
-                                          ▼
-                     Every agent/round logged → metrics + plots
-```
+Question -> three independent persona responses -> synchronous debate rounds using only peers' previous-round responses -> final majority and confidence-weighted votes -> CSV logs, metrics and plots.
 
-Every agent uses the **same underlying model** but a different system-prompt persona.
-This is a deliberate control: it isolates belief dynamics (how confidence and answers
-shift from social pressure within the debate) from raw model-capability differences,
-which would otherwise confound the analysis.
+Agents use the same model, but persona instructions directly influence confidence. This controls model identity, not every source of bias. Each round is a fresh request: agents receive peer history but not their own previous response. A self-history control is an important next experiment.
 
-## What gets measured
+## Reproduce without an API key
 
-| Metric | What it tells you |
-|---|---|
-| **Accuracy by round** | Does debate actually help, or does groupthink cancel out the benefit of multiple perspectives? |
-| **Calibration curve / Expected Calibration Error (ECE)** | When an agent says "90% confident," is it right ~90% of the time? Is it over- or under-confident? |
-| **Confidence drift by round** | Do agents converge toward higher/lower confidence after seeing peers? |
-| **Belief-flip rate** | How often does an agent change its answer after debate, and does that flip more often move it toward or away from the correct answer? |
-| **Majority vote vs. confidence-weighted vote** | Which aggregation strategy actually performs better? |
+Requires Python 3.11+.
 
-## Project structure
-
-```
-multi-agent-calibration/
-├── README.md
-├── requirements.txt
-├── .env.example
-├── src/
-│   ├── agent.py          # single agent call: prompt building + response parsing
-│   ├── personas.py        # system prompts for the 3 agent personas
-│   ├── orchestrator.py    # runs the multi-round debate loop, per question
-│   ├── metrics.py         # calibration, ECE, flip-rate, accuracy calculations
-│   ├── llm_client.py       # OpenAI-compatible client factory (Groq / OpenAI / etc)
-│   └── run_experiment.py  # main entry point — run this
-├── data/
-│   └── questions.json     # 30 MCQ questions (mix of reasoning + CS/ML knowledge)
-├── results/
-│   ├── raw_logs.csv       # generated: one row per agent per round per question
-│   ├── summary.csv        # generated: one row per question, final aggregated answer
-│   ├── metrics.json       # generated: headline numbers
-│   └── plots/              # generated: accuracy, calibration, drift plots
-└── docs/
-    └── findings.md         # write your analysis here after running a real experiment
-```
-
-## Setup
-
-```bash
-git clone <your-repo-url>
+```sh
+git clone https://github.com/shriya5752/multi-agent-calibration.git
 cd multi-agent-calibration
-pip install -r requirements.txt
-cp .env.example .env
-# edit .env and add a free API key from https://console.groq.com
+python -m venv .venv
+# Activate the virtual environment for your shell.
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests -v
+python -m src.audit_results
+python -m src.run_experiment --mock --n-questions 8 --rounds 2 --seed 42
 ```
 
-## Usage
+The audit reads committed logs without API calls. Mock runs only test the pipeline; they are not experimental evidence. New runs go into unique `runs/` directories, preserving the committed results. `--output-dir` must name a directory that does not exist. Each new run saves a manifest containing model, mode, seed, dataset hash, temperature and time. The seed makes mock sampling repeatable; it does not guarantee provider reproducibility.
 
-**Test the pipeline first with zero API cost** (randomized fake responses — verifies
-the plumbing works end-to-end before you spend real API calls):
+For live calls, copy `.env.example` to `.env`, configure `LLM_API_KEY` and `LLM_BASE_URL`, then omit `--mock`. Live calls may incur provider costs. No live experiment was performed as part of this refinement.
 
-```bash
-python -m src.run_experiment --mock --n-questions 8 --rounds 2
-```
+## Reliability choices
 
-**Run the real experiment:**
+Malformed answers or missing/out-of-range confidence raise an explicit error rather than becoming random predictions. Raw response text is retained for successful future runs. Voting ties abstain and count as incorrect; tied flags are saved. ECE includes confidence endpoints. Tests cover parsing, calibration boundaries, tie handling and synchronous round isolation.
 
-```bash
-python -m src.run_experiment --rounds 2
-```
+## Files
 
-Optional flags:
+- `src/agent.py`: prompts, response parsing and model calls
+- `src/orchestrator.py`: synchronous rounds, transition logs and final voting
+- `src/metrics.py`: accuracy, ECE, confidence drift and belief flips
+- `src/audit_results.py`: offline baseline comparison, Brier score and paired bootstrap
+- `src/run_experiment.py`: CLI, run manifest and plots
+- `docs/findings.md`: qualified pilot interpretation
+- `docs/interview-readiness.md`: prioritized extensions and interview narrative
 
-```bash
-python -m src.run_experiment --n-questions 15 --rounds 3 --model llama-3.1-8b-instant
-```
+## Limits
 
-Output lands in `results/`: `raw_logs.csv`, `summary.csv`, `metrics.json`, and
-three plots in `results/plots/`.
-
-## Findings
-
-_Run the real experiment and fill in `docs/findings.md`, then summarize the headline
-result here. Things worth specifically checking once you have real data:_
-
-- _Did round-2/3 accuracy actually beat round-1 accuracy, or did agents converge on a
-  confidently-wrong answer?_
-- _What was the ECE at round 1 vs. the final round — did debate make calibration better
-  or worse?_
-- _Look at `flip_hurt_rate` vs `flip_helped_rate` — are agents more often talked out of
-  correct answers, or into them?_
-
-## Limitations / what I'd extend with more time
-
-- All three agents currently share one base model; a natural follow-up is giving each
-  agent a *different* model family to separate "persona effect" from "model effect."
-- The question set (30 MCQs) is small and hand-curated for interesting debate dynamics,
-  not a standard benchmark — swapping in a larger sampled subset of MMLU or GSM8K would
-  make results comparable to published work.
-- Confidence is self-reported by the model in-context, which is a weaker signal than
-  probing internal logits/log-probs directly — a stronger version of this project would
-  extract token-level log-probabilities for the answer choice instead of asking the
-  model to state a number.
-
-## Why I built this
-
-While reading around multi-agent LLM systems, I kept running into the same open question — does giving agents the ability to see and respond to each other actually improve their reliability, or does it just produce the appearance of consensus? Most treatments of multi-agent debate report only final-answer accuracy, without measuring whether an agent's stated confidence is actually correlated with correctness, or tracking what happens when one agent's answer flips after seeing a more confident peer.
-
-That gap is what this project isolates: not just whether debate changes the final answer, but whether it improves calibration — the correlation between stated confidence and empirical accuracy, and how belief updates propagate across rounds. The setup is deliberately minimal: three fixed personas on a single base model, a controlled question set, and a small, explicit metric suite (accuracy by round, expected calibration error, belief-flip rate) so the calibration effect can be isolated from confounds like model-capability differences across agents.
+30 manually selected questions, one historical run, correlated same-model agents, confidence-shaped personas, no compute-matched no-peer control, no inference-cost accounting, no resume after failure, and no historical raw provider responses. Confidence is a stated probability of the chosen answer being correct; the Brier score here measures that binary event, not a full multiclass probability distribution. ECE depends on binning. Question bootstrap intervals do not capture repeated-run/model uncertainty or justify population generalization.
