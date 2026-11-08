@@ -5,16 +5,15 @@ Each agent must return a structured triple:
     {"answer": "A", "confidence": 0-100, "reasoning": "..."}
 
 We ask the model to emit a strict tag format and parse it with regex,
-falling back to a safe default if parsing fails (logged, not silently
-dropped) so a single malformed response never crashes a whole run.
+failing explicitly on malformed output so invalid predictions cannot enter metrics.
 """
 
 import re
 import random
 
 
-ANSWER_RE = re.compile(r"ANSWER:\s*([A-D])", re.IGNORECASE)
-CONFIDENCE_RE = re.compile(r"CONFIDENCE:\s*(\d{1,3})", re.IGNORECASE)
+ANSWER_RE = re.compile(r"^ANSWER:[ \t]*([A-D])[ \t]*$", re.IGNORECASE | re.MULTILINE)
+CONFIDENCE_RE = re.compile(r"^CONFIDENCE:[ \t]*(\d{1,3})[ \t]*%?[ \t]*$", re.IGNORECASE | re.MULTILINE)
 
 
 def build_prompt(question, options, other_responses, round_num):
@@ -42,7 +41,7 @@ def build_prompt(question, options, other_responses, round_num):
         base += (
             f"Other agents' round {round_num - 1} responses:\n{other_block}\n\n"
             "Reconsider the question given what the other agents said. "
-            "You may change your answer or keep it — decide based on the "
+            "You may change your answer or keep it â€” decide based on the "
             "arguments, not on peer pressure alone.\n"
             "Respond in EXACTLY this format:\n"
             "REASONING: <2-3 sentences, mention if/why you changed your mind>\n"
@@ -59,7 +58,8 @@ def parse_response(text):
 
     answer = answer_match.group(1).upper() if answer_match else None
     confidence = int(conf_match.group(1)) if conf_match else None
-    confidence = max(0, min(100, confidence)) if confidence is not None else 50
+    if answer is None or confidence is None or not 0 <= confidence <= 100:
+        raise ValueError("Malformed model response: expected ANSWER A-D and CONFIDENCE 0-100. " + repr(text))
 
     reasoning = text.strip()
     if "REASONING:" in text.upper():
@@ -71,10 +71,7 @@ def parse_response(text):
         except ValueError:
             pass
 
-    parsed_ok = answer is not None
-    if not parsed_ok:
-        # Fallback: don't crash the run, flag it instead
-        answer = random.choice(["A", "B", "C", "D"])
+    parsed_ok = True
 
     return {
         "answer": answer,
@@ -124,3 +121,4 @@ class Agent:
             f"ANSWER: {letter}\n"
             f"CONFIDENCE: {conf}\n"
         )
+

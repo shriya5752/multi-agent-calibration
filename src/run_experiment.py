@@ -17,6 +17,9 @@ import argparse
 import json
 import os
 import sys
+import random
+import hashlib
+from datetime import datetime, timezone
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -104,7 +107,14 @@ def main():
     parser.add_argument("--rounds", type=int, default=2, help="Number of debate rounds")
     parser.add_argument("--model", type=str, default="llama-3.1-8b-instant",
                          help="Model name to pass to the API")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--output-dir", default=None, help="New directory for this run; refuses overwrites")
     args = parser.parse_args()
+    if args.rounds < 1 or (args.n_questions is not None and args.n_questions < 1):
+        parser.error("rounds and n-questions must be positive")
+    random.seed(args.seed)
+    results_dir = args.output_dir or os.path.join(ROOT, "runs", datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
+    os.makedirs(results_dir, exist_ok=False)
 
     load_dotenv()
 
@@ -135,15 +145,11 @@ def main():
     raw_df = pd.DataFrame(raw_logs)
     summary_df = pd.DataFrame(summaries)
 
-    results_dir = os.path.join(ROOT, "results")
-    os.makedirs(results_dir, exist_ok=True)
     raw_df.to_csv(os.path.join(results_dir, "raw_logs.csv"), index=False)
     summary_df.to_csv(os.path.join(results_dir, "summary.csv"), index=False)
 
-    n_unparsed = (~raw_df["parsed_ok"]).sum()
-    if n_unparsed:
-        print(f"WARNING: {n_unparsed} responses could not be parsed and were "
-              f"assigned a random fallback answer. Check raw_logs.csv (parsed_ok=False).")
+    with open(os.path.join(results_dir, "manifest.json"), "w") as f:
+        json.dump({"mock": args.mock, "model": args.model, "seed": args.seed, "rounds": args.rounds, "n_questions": len(questions), "temperature": 0.7, "dataset_sha256": hashlib.sha256(json.dumps(questions, sort_keys=True).encode()).hexdigest(), "created_utc": datetime.now(timezone.utc).isoformat(), "note": "Seed controls mock RNG only; remote model responses may vary."}, f, indent=2)
 
     headline = {
         "n_questions": len(questions),
@@ -162,9 +168,9 @@ def main():
 
     print("\n=== HEADLINE RESULTS ===")
     print(json.dumps(headline, indent=2))
-    print(f"\nSaved: results/raw_logs.csv, results/summary.csv, results/metrics.json, "
-          f"results/plots/*.png")
+    print(f"\nSaved run to: {results_dir}")
 
 
 if __name__ == "__main__":
     main()
+
