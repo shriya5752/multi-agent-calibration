@@ -54,7 +54,6 @@ Malformed answers or missing/out-of-range confidence raise an explicit error rat
 - `src/audit_results.py`: offline baseline comparison, Brier score and paired bootstrap
 - `src/run_experiment.py`: CLI, run manifest and plots
 - `docs/findings.md`: qualified pilot interpretation
-- `docs/interview-readiness.md`: prioritized extensions and interview narrative
 
 ## Limits
 
